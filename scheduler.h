@@ -3,6 +3,6 @@
 
 #include "scheduler.c"
 
-void run_scheduler();
+void run_scheduler(char *);
 
 #endif

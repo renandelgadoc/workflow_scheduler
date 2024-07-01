@@ -1,106 +1,105 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-#define MAX_PROCESSES 256
+#define MAX_PROGRAMS 10
 
-typedef struct process
+typedef struct program
 {
     char *command;
     int pid;
     int *dependencies;
-    struct process *next_on_wait;
-} process;
+} program;
 
 typedef struct scheduler
 {
-    FILE *fptr;
-    int process_pointer;
-    process *on_wait;
-    int *process_status;
+    int program_pointer;
+    int *program_status;
+    program **program_queue;
 } scheduler;
 
-scheduler *create_scheduler(char *filepath)
+scheduler *create_scheduler()
 {
     scheduler *scheduler_instance = (scheduler *)malloc(sizeof(scheduler));
-    process *on_wait = NULL;
 
-    if (!(scheduler_instance->fptr = fopen(filepath, "r")))
+    scheduler_instance->program_queue = (program **)malloc(MAX_PROGRAMS * sizeof(program *));
+    memset(scheduler_instance->program_queue, 0, MAX_PROGRAMS);
+
+    scheduler_instance->program_status = (int *)malloc(MAX_PROGRAMS * sizeof(int));
+    memset(scheduler_instance->program_status, 0, MAX_PROGRAMS);
+
+    return scheduler_instance;
+}
+
+void create_program_queue(scheduler *scheduler_instance, char *filepath)
+{
+
+    FILE *fptr;
+
+    if (!(fptr = fopen(filepath, "r")))
     {
         printf("Erro! Impossivel abrir o arquivo!\n");
         exit(1);
     }
 
-    scheduler_instance->on_wait = NULL;
-
-    scheduler_instance->process_status = (int *)malloc(MAX_PROCESSES * sizeof(int));
-
-    memset(scheduler_instance->process_status, 0, MAX_PROCESSES);
-
-    return scheduler_instance;
-}
-
-process *create_process(scheduler *scheduler_instance)
-{
-
-    process *process_instance = (process *)malloc(sizeof(process));
-
-    process_instance->command = malloc(8 * sizeof(char));
-
-    process_instance->next_on_wait = NULL;
-
-    char dependencies[255];
-
-    int read_status = fscanf(scheduler_instance->fptr, "%d %s %s", &process_instance->pid, process_instance->command, dependencies);
-
-    if (read_status == EOF && scheduler_instance->on_wait == NULL)
-    {
-        // Acabou
-        free(process_instance->dependencies);
-        free(process_instance->next_on_wait);
-        free(process_instance);
-        free(process_instance->command);
-        fclose(scheduler_instance->fptr);
-        free(scheduler_instance->on_wait);
-        free(scheduler_instance->process_status);
-        free(scheduler_instance);
-        exit(0);
-    }
-    else if (read_status == EOF)
-    {
-        return NULL;
-    }
-
-    process_instance->dependencies = (int *)malloc((MAX_PROCESSES - 1) * sizeof(int));
-    memset(process_instance->dependencies, 0, MAX_PROCESSES - 1);
-
     int i = 0;
-    char c = dependencies[i];
-    if (c == '0')
-        return process_instance;
 
-    int j = 0;
+    
+    char *command = malloc(8 * sizeof(char));
+    char dependencies[255];
+    int pid;
 
-    while (c != '#')
+    while (fscanf(fptr, "%d %s %s", &pid, command, dependencies) != EOF)
     {
-        if (c == ',')
+
+        scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
+        
+        scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
+        strcpy(scheduler_instance->program_queue[i]->command, command);
+
+        scheduler_instance->program_queue[i]->pid = pid;
+
+
+        scheduler_instance->program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
+        memset(scheduler_instance->program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
+
+        int j = 0;
+        char c = dependencies[j];
+        if (c == '0')
         {
-            c = dependencies[++i];
+            i++;
+            scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
+            scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
             continue;
         }
-        process_instance->dependencies[j] = dependencies[i] - 48;
-        c = dependencies[++i];
-        j++;
+
+        int k = 0;
+
+        while (c != '#')
+        {
+            if (c == ',')
+            {
+                c = dependencies[++j];
+                continue;
+            }
+            scheduler_instance->program_queue[i]->dependencies[k] = dependencies[j] - 48;
+            c = dependencies[++j];
+            k++;
+        }
+        i++;
+        memset(command, '\0', 8);
+        memset(dependencies, '\0', 255);
     }
-    return process_instance;
+
 }
 
-int check_dependecies(scheduler *scheduler_instance, process *current_process)
+int check_dependecies(scheduler *scheduler_instance, program *current_program)
 {
-    for (int i = 0; current_process->dependencies[i] != 0; i++)
+    for (int i = 0; current_program->dependencies[i] != 0; i++)
     {
-        int j = current_process->dependencies[i] - 1;
-        if (scheduler_instance->process_status[j] == 0)
+        int j = current_program->dependencies[i] - 1;
+        if (scheduler_instance->program_status[j] == 0)
         {
             return 1;
         }
@@ -108,96 +107,76 @@ int check_dependecies(scheduler *scheduler_instance, process *current_process)
     return 0;
 }
 
-void add_to_wait_queue(scheduler *scheduler_instance, process *process_instance)
+program *check_wait_queue(scheduler *scheduler_instance)
 {
-    if (scheduler_instance->on_wait == NULL)
+
+    int i = 0;
+
+    while (scheduler_instance->program_queue[i] != NULL)
     {
-        scheduler_instance->on_wait = process_instance;
-        return;
+        if (check_dependecies(scheduler_instance, scheduler_instance->program_queue[i]) == 0)
+        {
+            program *next = scheduler_instance->program_queue[i];
+            while (scheduler_instance->program_queue[i] != NULL)
+            {
+                scheduler_instance->program_queue[i] = scheduler_instance->program_queue[i + 1];
+                i++;
+            }
+            return next;
+        }
+        i++;
     }
 
-    process *current = scheduler_instance->on_wait;
-
-    while (current->next_on_wait != NULL)
-    {
-        current = current->next_on_wait;
-    }
-
-    current->next_on_wait = process_instance;
+    return NULL;
 }
 
-process *check_process_on_wait(scheduler *scheduler_instance)
+// Fazer o fork e chamar programo
+void run_program(program *program_instance)
 {
+    pid_t pid;
 
-    process *current = scheduler_instance->on_wait;
-    process *ready_process;
-
-    if (check_dependecies(scheduler_instance, current) == 0)
+    pid = fork();
+    switch (pid)
     {
-        ready_process = current;
-        scheduler_instance->on_wait = current->next_on_wait;
-        return ready_process;
+    case -1:
+        perror("fork");
+        exit(EXIT_FAILURE);
+    case 0:
+        printf("%s %d\n", "pid -", program_instance->pid);
+        printf("%s %s\n", "command -", program_instance->command);
+        printf("\n");
+        exit(0);
+    default:
+        printf("Child is PID %jd\n", (intmax_t)pid);
+        wait(NULL);
     }
 
-    while (current->next_on_wait != NULL)
-    {
-        if (check_dependecies(scheduler_instance, current->next_on_wait) == 0)
-        {
-            ready_process = current->next_on_wait;
-            current->next_on_wait = ready_process->next_on_wait;
-            return ready_process;
-        }
-        current = current->next_on_wait;
-    }
-
-    return current->next_on_wait;
+    free(program_instance->dependencies);
+    free(program_instance->command);
+    free(program_instance);
 }
 
-// Fazer o fork e chamar processo
-void run_process(process *process_instance)
+void run_scheduler(char *filepath)
 {
-    printf("%s %d\n", "pid -", process_instance->pid);
-    printf("%s %s\n", "command -", process_instance->command);
-    printf("\n");
+    scheduler *scheduler_instance = create_scheduler();
+    create_program_queue(scheduler_instance, filepath);
+    program *program_instance;
 
-    free(process_instance->dependencies);
-    // free(process_instance->next_on_wait);
-    free(process_instance->command);
-    free(process_instance);
-}
+    int i = 0;
 
-void run_scheduler()
-{
-    scheduler *scheduler_instance = create_scheduler("./input");
-    while (2 > 1)
+    while (scheduler_instance->program_queue[0] != 0)
     {
-        process *process_instance;
-
-        if (scheduler_instance->on_wait != NULL)
+        program_instance = check_wait_queue(scheduler_instance);
+        if (program_instance != NULL)
         {
-            process_instance = check_process_on_wait(scheduler_instance);
-            if (process_instance != NULL)
-            {
-                int j = process_instance->pid - 1;
-                scheduler_instance->process_status[j] = 1;
-                run_process(process_instance);
-            }
-        }
-
-        process_instance = create_process(scheduler_instance);
-
-        if (process_instance != NULL)
-        {
-            if (check_dependecies(scheduler_instance, process_instance) == 0)
-            {
-                int j = process_instance->pid - 1;
-                scheduler_instance->process_status[j] = 1;
-                run_process(process_instance);
-            }
-            else
-            {
-                add_to_wait_queue(scheduler_instance, process_instance);
-            }
+            int j = program_instance->pid - 1;
+            scheduler_instance->program_status[j] = 1;
+            run_program(program_instance);
         }
     }
+
+    free(scheduler_instance->program_status);
+    free(scheduler_instance->program_queue);
+    free(scheduler_instance);
+    exit(0);
 }

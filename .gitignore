@@ -52,4 +52,6 @@ Mkfile.old
 dkms.conf
 
 *.pdf
-.vscode
+.vscode/*
+!.vscode/launch.json
+main

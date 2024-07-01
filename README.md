@@ -4,5 +4,5 @@
 
 ``` shell
 $ gcc -o main main.c
-$ ./main
+$ ./main $INPUT_FILE
 ```
