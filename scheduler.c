@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define MAX_PROGRAMS 10
+#define MAX_PROGRAMS 255
 
 typedef struct program
 {
@@ -89,7 +89,7 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
         }
         i++;
         memset(command, '\0', 8);
-        memset(dependencies, '\0', 255);
+        memset(dependencies, '\0', MAX_PROGRAMS - 1);
     }
 
 }

@@ -55,3 +55,5 @@ dkms.conf
 .vscode/*
 !.vscode/launch.json
 main
+teste*
+!teste*.c
