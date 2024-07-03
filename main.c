@@ -1,14 +1,39 @@
-// #include <stdio.h>
+#include <stdio.h>
+#include <unistd.h>
 
 #include "scheduler.h"
 
+#define NUMBER_OF_ARGUMENTS 4
+
 int main(int argc, char *argv[])
 {
+    char *cores = NULL;
+    char *filepath = NULL;
 
-    // printf("PID = %jd\n", (intmax_t) getpid());
+    for (int i = 1; i < NUMBER_OF_ARGUMENTS;)
+    {
+        if (strcmp(argv[i], "-cores") == 0 && (i + 1) < argc)
+        {
+            cores = argv[i + 1];
+            i+=2;
+        }
+        else
+        {
+            filepath = argv[i];
+            i++;
+        }
+    }
 
-    if (argc != 2)
-        return 1;
+    if (cores == NULL)
+    {
+        printf("cores not provided\n");
+        exit(1);
+    }
 
-    run_scheduler(argv[1]);
+    if (access(filepath, F_OK) != 0) {
+        printf("input file is not valid\n");
+        exit(1);
+    }
+
+    run_scheduler(filepath, cores);
 }

@@ -8,18 +8,21 @@
 typedef struct program
 {
     char *command;
-    int pid;
+    int program_number;
+    pid_t child_pid;
     int *dependencies;
 } program;
 
 typedef struct scheduler
 {
     int program_pointer;
+    int cores;
     int *program_status;
+    int wait_count;
     program **program_queue;
 } scheduler;
 
-scheduler *create_scheduler()
+scheduler *create_scheduler(char *cores)
 {
     scheduler *scheduler_instance = (scheduler *)malloc(sizeof(scheduler));
 
@@ -28,6 +31,10 @@ scheduler *create_scheduler()
 
     scheduler_instance->program_status = (int *)malloc(MAX_PROGRAMS * sizeof(int));
     memset(scheduler_instance->program_status, 0, MAX_PROGRAMS);
+
+    scheduler_instance->wait_count = 0;
+
+    scheduler_instance->cores = atoi(cores);
 
     return scheduler_instance;
 }
@@ -45,7 +52,6 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
 
     int i = 0;
 
-    
     char *command = malloc(8 * sizeof(char));
     char dependencies[255];
     int pid;
@@ -54,12 +60,11 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
     {
 
         scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
-        
+
         scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
         strcpy(scheduler_instance->program_queue[i]->command, command);
 
-        scheduler_instance->program_queue[i]->pid = pid;
-
+        scheduler_instance->program_queue[i]->program_number = pid;
 
         scheduler_instance->program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
         memset(scheduler_instance->program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
@@ -91,7 +96,6 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
         memset(command, '\0', 8);
         memset(dependencies, '\0', MAX_PROGRAMS - 1);
     }
-
 }
 
 int check_dependecies(scheduler *scheduler_instance, program *current_program)
@@ -136,29 +140,30 @@ void run_program(program *program_instance)
     pid_t pid;
 
     pid = fork();
-    switch (pid)
+    if (pid == -1)
     {
-    case -1:
         perror("fork");
         exit(EXIT_FAILURE);
-    case 0:
-        printf("%s %d\n", "pid -", program_instance->pid);
-        printf("%s %s\n", "command -", program_instance->command);
-        printf("\n");
-        exit(0);
-    default:
-        printf("Child is PID %jd\n", (intmax_t)pid);
-        wait(NULL);
     }
+    else if (pid == 0)
+    {
+        printf("%s %d\n", "program number -", program_instance->program_number);
+        program_instance->child_pid = pid;
+        execl(program_instance->command, (char *)NULL);
+        exit(0);
+    }
+    // default:
+    // printf("Child is PID %jd\n", (intmax_t)pid);
 
     free(program_instance->dependencies);
     free(program_instance->command);
     free(program_instance);
 }
 
-void run_scheduler(char *filepath)
+void run_scheduler(char *filepath, char *cores)
 {
-    scheduler *scheduler_instance = create_scheduler();
+
+    scheduler *scheduler_instance = create_scheduler(cores);
     create_program_queue(scheduler_instance, filepath);
     program *program_instance;
 
@@ -166,13 +171,30 @@ void run_scheduler(char *filepath)
 
     while (scheduler_instance->program_queue[0] != 0)
     {
-        program_instance = check_wait_queue(scheduler_instance);
-        if (program_instance != NULL)
+        if (scheduler_instance->cores > 0)
         {
-            int j = program_instance->pid - 1;
-            scheduler_instance->program_status[j] = 1;
-            run_program(program_instance);
+
+            program_instance = check_wait_queue(scheduler_instance);
+            if (program_instance != NULL)
+            {
+                scheduler_instance->cores--;
+                run_program(program_instance);
+                scheduler_instance->wait_count++;
+            }
         }
+
+        if (scheduler_instance->wait_count > scheduler_instance->cores)
+        {
+            wait(NULL);
+            scheduler_instance->wait_count--;
+            scheduler_instance->cores++;
+        }
+    }
+
+    for (; scheduler_instance->wait_count > 0; scheduler_instance->wait_count--)
+    {
+        wait(NULL);
+        scheduler_instance->cores++;
     }
 
     free(scheduler_instance->program_status);
