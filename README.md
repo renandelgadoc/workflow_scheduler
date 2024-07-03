@@ -3,6 +3,6 @@
 ## How to run
 
 ``` shell
-$ gcc -o main main.c
-$ ./main $INPUT_FILE
+$ make -B
+$ ./main -cores $NUMBER_OF_CORES $INPUT_FILE
 ```
