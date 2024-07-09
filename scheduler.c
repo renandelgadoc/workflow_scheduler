@@ -2,24 +2,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <errno.h>
 
 #define MAX_PROGRAMS 255
 
 typedef struct program
 {
     char *command;
-    int pid;
+    int program_number;
+    // pid_t child_pid;
     int *dependencies;
 } program;
 
 typedef struct scheduler
 {
     int program_pointer;
+    int cores;
     int *program_status;
+    // int wait_count;
     program **program_queue;
+    int qid;
 } scheduler;
 
-scheduler *create_scheduler()
+typedef struct mensagem
+{
+    long pid;
+    char msg[30];
+} mensagem;
+
+scheduler *create_scheduler(char *cores)
 {
     scheduler *scheduler_instance = (scheduler *)malloc(sizeof(scheduler));
 
@@ -28,6 +42,20 @@ scheduler *create_scheduler()
 
     scheduler_instance->program_status = (int *)malloc(MAX_PROGRAMS * sizeof(int));
     memset(scheduler_instance->program_status, 0, MAX_PROGRAMS);
+
+    // scheduler_instance->wait_count = 0;
+
+    scheduler_instance->cores = atoi(cores);
+
+    int idfila;
+
+    if ((idfila = msgget(0x1223, IPC_CREAT | 0x1ff)) < 0)
+    {
+        printf("erro na criacao da fila\n");
+        exit(1);
+    }
+
+    scheduler_instance->qid = idfila;
 
     return scheduler_instance;
 }
@@ -45,7 +73,6 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
 
     int i = 0;
 
-    
     char *command = malloc(8 * sizeof(char));
     char dependencies[255];
     int pid;
@@ -54,12 +81,11 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
     {
 
         scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
-        
+
         scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
         strcpy(scheduler_instance->program_queue[i]->command, command);
 
-        scheduler_instance->program_queue[i]->pid = pid;
-
+        scheduler_instance->program_queue[i]->program_number = pid;
 
         scheduler_instance->program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
         memset(scheduler_instance->program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
@@ -91,7 +117,6 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
         memset(command, '\0', 8);
         memset(dependencies, '\0', MAX_PROGRAMS - 1);
     }
-
 }
 
 int check_dependecies(scheduler *scheduler_instance, program *current_program)
@@ -130,25 +155,44 @@ program *check_wait_queue(scheduler *scheduler_instance)
     return NULL;
 }
 
-// Fazer o fork e chamar programo
-void run_program(program *program_instance)
+void run_program(int qid, program *program_instance)
 {
     pid_t pid;
+    mensagem mensagem_snd;
 
     pid = fork();
-    switch (pid)
+    if (pid == -1)
     {
-    case -1:
         perror("fork");
         exit(EXIT_FAILURE);
-    case 0:
-        printf("%s %d\n", "pid -", program_instance->pid);
-        printf("%s %s\n", "command -", program_instance->command);
-        printf("\n");
+    }
+    else if (pid == 0)
+    {
+        mensagem mensagem_snd;
+        mensagem_snd.pid = getpid();
+        sprintf(mensagem_snd.msg, "%d", program_instance->program_number);
+
+        // execl(program_instance->command, (char *)NULL);
+
+        if (strcmp(program_instance->command, "teste15") == 0)
+        {
+            printf("Program %d Sleeping for 15 seconds...\n", program_instance->program_number);
+            sleep(15);
+        }
+        else
+        {
+            printf("Program %d Sleeping for 30 seconds...\n", program_instance->program_number);
+            sleep(30);
+        }
+
+        // printf("%s %s %s %s\n\n", "terminou - programa", mensagem_snd.msg, "/ processo", mensagem_snd.pid);
+
+        if (msgsnd(qid, &mensagem_snd, sizeof(mensagem_snd), 0) < 0)
+        {
+            perror("msgsnd");
+            exit(EXIT_FAILURE);
+        }
         exit(0);
-    default:
-        printf("Child is PID %jd\n", (intmax_t)pid);
-        wait(NULL);
     }
 
     free(program_instance->dependencies);
@@ -156,25 +200,50 @@ void run_program(program *program_instance)
     free(program_instance);
 }
 
-void run_scheduler(char *filepath)
+void run_scheduler(char *filepath, char *cores)
 {
-    scheduler *scheduler_instance = create_scheduler();
+
+    scheduler *scheduler_instance = create_scheduler(cores);
     create_program_queue(scheduler_instance, filepath);
     program *program_instance;
 
     int i = 0;
+    int rcv_flg;
+    int child_status;
+
+    mensagem mensagem_rec;
 
     while (scheduler_instance->program_queue[0] != 0)
     {
         program_instance = check_wait_queue(scheduler_instance);
         if (program_instance != NULL)
         {
-            int j = program_instance->pid - 1;
-            scheduler_instance->program_status[j] = 1;
-            run_program(program_instance);
+            scheduler_instance->cores--;
+            run_program(scheduler_instance->qid, program_instance);
+        }
+
+        rcv_flg = IPC_NOWAIT;
+        mensagem mensagem_rec;
+
+        if (scheduler_instance->cores == 0)
+            rcv_flg = 0;
+
+        if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
+        {
+            printf("Killing program=%s process=%d\n", mensagem_rec.msg, mensagem_rec.pid);
+            while(waitpid(mensagem_rec.pid, &child_status, 0) < 0);
+            scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
+            int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
         }
     }
 
+    struct msqid_ds buf;
+    if (msgctl(scheduler_instance->qid, IPC_RMID, &buf) == -1)
+    {
+        perror("msgctl");
+        exit(1);
+    }
+    
     free(scheduler_instance->program_status);
     free(scheduler_instance->program_queue);
     free(scheduler_instance);
