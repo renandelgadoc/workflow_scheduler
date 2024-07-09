@@ -6,5 +6,5 @@ int main() {
     printf("Sleeping for 30 seconds...\n");
     sleep(30);
     // printf("\n");
-    return 0;
+    exit(0);
 }
