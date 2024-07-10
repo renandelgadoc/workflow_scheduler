@@ -3,6 +3,7 @@
 
 #include "scheduler.c"
 
+struct mensagem;
 void run_scheduler(char *, char *);
 
 #endif

@@ -12,7 +12,7 @@
 typedef struct program
 {
     char *command;
-    int program_number;
+    char program_number[3];
     // pid_t child_pid;
     int *dependencies;
 } program;
@@ -21,6 +21,7 @@ typedef struct scheduler
 {
     int program_pointer;
     int cores;
+    int total_cores;
     int *program_status;
     // int wait_count;
     program **program_queue;
@@ -46,6 +47,7 @@ scheduler *create_scheduler(char *cores)
     // scheduler_instance->wait_count = 0;
 
     scheduler_instance->cores = atoi(cores);
+    scheduler_instance->total_cores = atoi(cores);
 
     int idfila;
 
@@ -75,9 +77,9 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
 
     char *command = malloc(8 * sizeof(char));
     char dependencies[255];
-    int pid;
+    char pid[3];
 
-    while (fscanf(fptr, "%d %s %s", &pid, command, dependencies) != EOF)
+    while (fscanf(fptr, "%s %s %s", pid, command, dependencies) != EOF)
     {
 
         scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
@@ -85,7 +87,7 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
         scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
         strcpy(scheduler_instance->program_queue[i]->command, command);
 
-        scheduler_instance->program_queue[i]->program_number = pid;
+        strcpy(scheduler_instance->program_queue[i]->program_number, pid);
 
         scheduler_instance->program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
         memset(scheduler_instance->program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
@@ -158,7 +160,6 @@ program *check_wait_queue(scheduler *scheduler_instance)
 void run_program(int qid, program *program_instance)
 {
     pid_t pid;
-    mensagem mensagem_snd;
 
     pid = fork();
     if (pid == -1)
@@ -168,31 +169,12 @@ void run_program(int qid, program *program_instance)
     }
     else if (pid == 0)
     {
-        mensagem mensagem_snd;
-        mensagem_snd.pid = getpid();
-        sprintf(mensagem_snd.msg, "%d", program_instance->program_number);
 
-        // execl(program_instance->command, (char *)NULL);
-
-        if (strcmp(program_instance->command, "teste15") == 0)
-        {
-            printf("Program %d Sleeping for 15 seconds...\n", program_instance->program_number);
-            sleep(15);
-        }
-        else
-        {
-            printf("Program %d Sleeping for 30 seconds...\n", program_instance->program_number);
-            sleep(30);
-        }
-
-        // printf("%s %s %s %s\n\n", "terminou - programa", mensagem_snd.msg, "/ processo", mensagem_snd.pid);
-
-        if (msgsnd(qid, &mensagem_snd, sizeof(mensagem_snd), 0) < 0)
-        {
-            perror("msgsnd");
-            exit(EXIT_FAILURE);
-        }
-        exit(0);
+        char command[10] = "./";
+        strcat(command, program_instance->command);
+        char qid_string[15];
+        sprintf(qid_string, "%d", qid);
+        execl(command, program_instance->command, program_instance->program_number, qid_string, (char *)NULL);
     }
 
     free(program_instance->dependencies);
@@ -213,7 +195,7 @@ void run_scheduler(char *filepath, char *cores)
 
     mensagem mensagem_rec;
 
-    while (scheduler_instance->program_queue[0] != 0)
+    while (scheduler_instance->program_queue[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores)
     {
         program_instance = check_wait_queue(scheduler_instance);
         if (program_instance != NULL)
@@ -231,9 +213,11 @@ void run_scheduler(char *filepath, char *cores)
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
         {
             printf("Killing program=%s process=%d\n", mensagem_rec.msg, mensagem_rec.pid);
-            while(waitpid(mensagem_rec.pid, &child_status, 0) < 0);
+            while (waitpid(mensagem_rec.pid, &child_status, 0) < 0)
+                ;
             scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
             int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
+            scheduler_instance->cores++;
         }
     }
 
@@ -243,7 +227,7 @@ void run_scheduler(char *filepath, char *cores)
         perror("msgctl");
         exit(1);
     }
-    
+
     free(scheduler_instance->program_status);
     free(scheduler_instance->program_queue);
     free(scheduler_instance);
