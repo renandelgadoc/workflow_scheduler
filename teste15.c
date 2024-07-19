@@ -8,20 +8,30 @@
 #include <errno.h>
 #include "scheduler.h"
 
+int block = 1;
+
+void leave_block(int signum)
+{
+    printf("Caught signal %d, coming out...\n", signum);
+    block = 0;
+}
+
 int main(int argc, char *argv[])
 {
 
-    // for(int i = 0; i< argc; i++){
-    //     printf("%s\n", argv[i]);
-    // }
+    signal(SIGALRM, leave_block);
+
+    printf("%s %d\n", "child pid -", getpid());
+    printf("Busy Waiting for 15 seconds...\n");
+    // sleep(15);
+    alarm(15);
+    while (block)
+        ;
+    // block = 0;
 
     mensagem mensagem_snd;
     mensagem_snd.pid = getpid();
     strcpy(mensagem_snd.msg, argv[1]);
-
-    printf("%s %d\n", "child pid -", getpid());
-    printf("Sleeping for 15 seconds...\n");
-    sleep(15);
 
     if (msgsnd(atoi(argv[2]), &mensagem_snd, sizeof(mensagem_snd), 0) < 0)
     {

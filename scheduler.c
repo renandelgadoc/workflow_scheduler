@@ -9,6 +9,8 @@
 
 #define MAX_PROGRAMS 255
 
+int double_check = 0;
+
 typedef struct program
 {
     char *command;
@@ -161,6 +163,8 @@ void run_program(int qid, program *program_instance)
 {
     pid_t pid;
 
+    printf("program - %s\n", program_instance->program_number);
+
     pid = fork();
     if (pid == -1)
     {
@@ -169,7 +173,6 @@ void run_program(int qid, program *program_instance)
     }
     else if (pid == 0)
     {
-
         char command[10] = "./";
         strcat(command, program_instance->command);
         char qid_string[15];
@@ -207,7 +210,7 @@ void run_scheduler(char *filepath, char *cores)
         rcv_flg = IPC_NOWAIT;
         mensagem mensagem_rec;
 
-        if (scheduler_instance->cores == 0)
+        if (scheduler_instance->cores == 0 || double_check)
             rcv_flg = 0;
 
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
@@ -218,6 +221,10 @@ void run_scheduler(char *filepath, char *cores)
             scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
             int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
             scheduler_instance->cores++;
+            double_check = 0;
+        }
+        else{
+            double_check = 1;
         }
     }
 
