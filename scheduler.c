@@ -33,7 +33,7 @@ typedef struct scheduler
 typedef struct mensagem
 {
     long pid;
-    char msg[30];
+    char msg[100];
 } mensagem;
 
 scheduler *create_scheduler(char *cores)
@@ -163,7 +163,7 @@ void run_program(int qid, program *program_instance)
 {
     pid_t pid;
 
-    printf("program - %s\n", program_instance->program_number);
+    // printf("program - %s\n", program_instance->program_number);
 
     pid = fork();
     if (pid == -1)
@@ -215,11 +215,11 @@ void run_scheduler(char *filepath, char *cores)
 
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
         {
-            printf("Killing program=%s process=%d\n", mensagem_rec.msg, mensagem_rec.pid);
+            printf("Killing program %s - time of execution %ss - process pid %d\n", strtok(mensagem_rec.msg, " "), strtok(NULL, " "), mensagem_rec.pid);
             while (waitpid(mensagem_rec.pid, &child_status, 0) < 0)
                 ;
             scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
-            int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
+            // int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
             scheduler_instance->cores++;
             double_check = 0;
         }
