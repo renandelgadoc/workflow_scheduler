@@ -13,7 +13,7 @@ int block = 1;
 
 void leave_block(int signum)
 {
-    printf("Caught signal %d, coming out...\n", signum);
+    // printf("Caught signal %d, coming out...\n", signum);
     block = 0;
 }
 
