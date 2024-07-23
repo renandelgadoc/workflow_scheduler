@@ -163,7 +163,6 @@ void run_program(int qid, program *program_instance)
 {
     pid_t pid;
 
-    // printf("program - %s\n", program_instance->program_number);
 
     pid = fork();
     if (pid == -1)
@@ -173,6 +172,7 @@ void run_program(int qid, program *program_instance)
     }
     else if (pid == 0)
     {
+        printf("processo %s executando\n", program_instance->program_number);
         char command[10] = "./";
         strcat(command, program_instance->command);
         char qid_string[15];

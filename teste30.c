@@ -6,9 +6,10 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <errno.h>
-#include "scheduler.h"
 #include <time.h>
+#include <signal.h>
 
+#include "scheduler.h"
 
 int block = 1;
 
