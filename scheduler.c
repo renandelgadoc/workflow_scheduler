@@ -6,6 +6,7 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #define MAX_PROGRAMS 255
 
@@ -212,10 +213,10 @@ void run_scheduler(char *filepath, char *cores)
 
         if (scheduler_instance->cores == 0 || double_check)
             rcv_flg = 0;
-
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
         {
-            printf("Killing program %s - time of execution %ss - process pid %d\n", strtok(mensagem_rec.msg, " "), strtok(NULL, " "), mensagem_rec.pid);
+            char *token = strtok(mensagem_rec.msg, " ");
+            printf("Killing program %s - time of execution %ss - process pid %d\n", token, strtok(NULL, " "), mensagem_rec.pid);
             wait(NULL);
             scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
             // int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];

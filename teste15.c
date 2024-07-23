@@ -48,6 +48,7 @@ int main(int argc, char *argv[])
     snprintf(buffer, sizeof(buffer), " %.6f", (double)(end_time - start_time) / CLOCKS_PER_SEC);
     mensagem mensagem_snd;
     mensagem_snd.pid = getpid();
+    mensagem_snd.msg[0] = '\0';
     strcpy(mensagem_snd.msg, argv[1]);
     strcat(mensagem_snd.msg, buffer);
 
