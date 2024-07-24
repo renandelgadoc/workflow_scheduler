@@ -27,7 +27,8 @@ typedef struct scheduler
     int total_cores;
     int *program_status;
     // int wait_count;
-    program **program_queue;
+    program **program_queue_15;
+    program **program_queue_30;
     int qid;
 } scheduler;
 
@@ -41,8 +42,11 @@ scheduler *create_scheduler(char *cores)
 {
     scheduler *scheduler_instance = (scheduler *)malloc(sizeof(scheduler));
 
-    scheduler_instance->program_queue = (program **)malloc(MAX_PROGRAMS * sizeof(program *));
-    memset(scheduler_instance->program_queue, 0, MAX_PROGRAMS);
+    scheduler_instance->program_queue_15 = (program **)malloc(MAX_PROGRAMS * sizeof(program *));
+    memset(scheduler_instance->program_queue_15, 0, MAX_PROGRAMS);
+
+    scheduler_instance->program_queue_30 = (program **)malloc(MAX_PROGRAMS * sizeof(program *));
+    memset(scheduler_instance->program_queue_30, 0, MAX_PROGRAMS);
 
     scheduler_instance->program_status = (int *)malloc(MAX_PROGRAMS * sizeof(int));
     memset(scheduler_instance->program_status, 0, MAX_PROGRAMS);
@@ -76,32 +80,43 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
         exit(1);
     }
 
-    int i = 0;
-
     char *command = malloc(8 * sizeof(char));
     char dependencies[255];
     char pid[3];
 
+    program **program_queue;
+
     while (fscanf(fptr, "%s %s %s", pid, command, dependencies) != EOF)
     {
 
-        scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
+        if (!strcmp(command, "teste15"))
+        {
+            program_queue = scheduler_instance->program_queue_15;
+        }
+        else
+        {
+            program_queue = scheduler_instance->program_queue_30;
+        }
 
-        scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
-        strcpy(scheduler_instance->program_queue[i]->command, command);
+        int i = 0;
 
-        strcpy(scheduler_instance->program_queue[i]->program_number, pid);
+        while (program_queue[i] != NULL)
+            i++;
 
-        scheduler_instance->program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
-        memset(scheduler_instance->program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
+        program_queue[i] = (program *)malloc(sizeof(program));
+
+        program_queue[i]->command = malloc(8 * sizeof(char));
+        strcpy(program_queue[i]->command, command);
+
+        strcpy(program_queue[i]->program_number, pid);
+
+        program_queue[i]->dependencies = (int *)malloc((MAX_PROGRAMS - 1) * sizeof(int));
+        memset(program_queue[i]->dependencies, 0, MAX_PROGRAMS - 1);
 
         int j = 0;
         char c = dependencies[j];
         if (c == '0')
         {
-            i++;
-            scheduler_instance->program_queue[i] = (program *)malloc(sizeof(program));
-            scheduler_instance->program_queue[i]->command = malloc(8 * sizeof(char));
             continue;
         }
 
@@ -114,11 +129,10 @@ void create_program_queue(scheduler *scheduler_instance, char *filepath)
                 c = dependencies[++j];
                 continue;
             }
-            scheduler_instance->program_queue[i]->dependencies[k] = dependencies[j] - 48;
+            program_queue[i]->dependencies[k] = dependencies[j] - 48;
             c = dependencies[++j];
             k++;
         }
-        i++;
         memset(command, '\0', 8);
         memset(dependencies, '\0', MAX_PROGRAMS - 1);
     }
@@ -142,14 +156,30 @@ program *check_wait_queue(scheduler *scheduler_instance)
 
     int i = 0;
 
-    while (scheduler_instance->program_queue[i] != NULL)
+    while (scheduler_instance->program_queue_30[i] != NULL)
     {
-        if (check_dependecies(scheduler_instance, scheduler_instance->program_queue[i]) == 0)
+        if (check_dependecies(scheduler_instance, scheduler_instance->program_queue_30[i]) == 0)
         {
-            program *next = scheduler_instance->program_queue[i];
-            while (scheduler_instance->program_queue[i] != NULL)
+            program *next = scheduler_instance->program_queue_30[i];
+            while (scheduler_instance->program_queue_30[i] != NULL)
             {
-                scheduler_instance->program_queue[i] = scheduler_instance->program_queue[i + 1];
+                scheduler_instance->program_queue_30[i] = scheduler_instance->program_queue_30[i + 1];
+                i++;
+            }
+            return next;
+        }
+        i++;
+    }
+
+    i = 0;
+    while (scheduler_instance->program_queue_15[i] != NULL)
+    {
+        if (check_dependecies(scheduler_instance, scheduler_instance->program_queue_15[i]) == 0)
+        {
+            program *next = scheduler_instance->program_queue_15[i];
+            while (scheduler_instance->program_queue_15[i] != NULL)
+            {
+                scheduler_instance->program_queue_15[i] = scheduler_instance->program_queue_15[i + 1];
                 i++;
             }
             return next;
@@ -163,7 +193,6 @@ program *check_wait_queue(scheduler *scheduler_instance)
 void run_program(int qid, program *program_instance)
 {
     pid_t pid;
-
 
     pid = fork();
     if (pid == -1)
@@ -199,7 +228,7 @@ void run_scheduler(char *filepath, char *cores)
 
     mensagem mensagem_rec;
 
-    while (scheduler_instance->program_queue[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores)
+    while (scheduler_instance->program_queue_15[0] != 0 || scheduler_instance->program_queue_30[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores)
     {
         program_instance = check_wait_queue(scheduler_instance);
         if (program_instance != NULL)
@@ -213,17 +242,18 @@ void run_scheduler(char *filepath, char *cores)
 
         if (scheduler_instance->cores == 0 || double_check)
             rcv_flg = 0;
+
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
         {
             char *token = strtok(mensagem_rec.msg, " ");
             printf("Killing program %s - time of execution %ss - process pid %d\n", token, strtok(NULL, " "), mensagem_rec.pid);
             wait(NULL);
             scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1] = 1;
-            // int debug = scheduler_instance->program_status[atoi(mensagem_rec.msg) - 1];
             scheduler_instance->cores++;
             double_check = 0;
         }
-        else{
+        else
+        {
             double_check = 1;
         }
     }
@@ -236,7 +266,8 @@ void run_scheduler(char *filepath, char *cores)
     }
 
     free(scheduler_instance->program_status);
-    free(scheduler_instance->program_queue);
+    free(scheduler_instance->program_queue_15);
+    free(scheduler_instance->program_queue_30);
     free(scheduler_instance);
     exit(0);
 }
