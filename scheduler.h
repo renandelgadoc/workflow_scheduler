@@ -4,6 +4,6 @@
 #include "scheduler.c"
 
 struct mensagem;
-void run_scheduler(char *, char *);
+int run_scheduler(char *, char *);
 
 #endif

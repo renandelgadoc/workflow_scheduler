@@ -7,6 +7,7 @@
 #include <sys/msg.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #define MAX_PROGRAMS 255
 
@@ -215,7 +216,7 @@ void run_program(int qid, program *program_instance)
     free(program_instance);
 }
 
-void run_scheduler(char *filepath, char *cores)
+int run_scheduler(char *filepath, char *cores)
 {
 
     scheduler *scheduler_instance = create_scheduler(cores);
@@ -227,6 +228,12 @@ void run_scheduler(char *filepath, char *cores)
     int child_status;
 
     mensagem mensagem_rec;
+
+    clock_t start_time = clock();
+    if (start_time == (clock_t)-1) {
+        perror("clock");
+        return 1;
+    }
 
     while (scheduler_instance->program_queue_15[0] != 0 || scheduler_instance->program_queue_30[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores)
     {
@@ -240,8 +247,8 @@ void run_scheduler(char *filepath, char *cores)
         rcv_flg = IPC_NOWAIT;
         mensagem mensagem_rec;
 
-        if (scheduler_instance->cores == 0 || double_check)
-            rcv_flg = 0;
+        //if (scheduler_instance->cores == 0 || double_check)
+        //    rcv_flg = 0;
 
         if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
         {
@@ -257,6 +264,14 @@ void run_scheduler(char *filepath, char *cores)
             double_check = 1;
         }
     }
+
+    clock_t end_time = clock();
+    if (end_time == (clock_t)-1) {
+        perror("clock");
+        return 1;
+    }
+
+    printf("Total Makespan: %.6f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 
     struct msqid_ds buf;
     if (msgctl(scheduler_instance->qid, IPC_RMID, &buf) == -1)
