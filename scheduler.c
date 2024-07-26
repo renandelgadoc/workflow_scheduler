@@ -59,7 +59,7 @@ scheduler *create_scheduler(char *cores)
 
     int idfila;
 
-    if ((idfila = msgget(0x1223, IPC_CREAT | 0x1ff)) < 0)
+    if ((idfila = msgget(62743, IPC_CREAT | 0x1ff)) < 0)
     {
         printf("erro na criacao da fila\n");
         exit(1);
@@ -235,8 +235,7 @@ int run_scheduler(char *filepath, char *cores)
         return 1;
     }
 
-    while (scheduler_instance->program_queue_15[0] != 0 || scheduler_instance->program_queue_30[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores)
-    {
+    while (scheduler_instance->program_queue_15[0] != 0 || scheduler_instance->program_queue_30[0] != 0 || scheduler_instance->cores < scheduler_instance->total_cores) {
         program_instance = check_wait_queue(scheduler_instance);
         if (program_instance != NULL)
         {
@@ -250,7 +249,17 @@ int run_scheduler(char *filepath, char *cores)
         //if (scheduler_instance->cores == 0 || double_check)
         //    rcv_flg = 0;
 
-        if (msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg) != -1)
+        int abacate;
+        if (scheduler_instance->cores == 0) {
+            abacate = -1;
+            while (abacate == -1) {
+                abacate = msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg);
+            }
+        } else {
+            abacate = msgrcv(scheduler_instance->qid, &mensagem_rec, sizeof(mensagem_rec), 0, rcv_flg);
+        }
+
+        if (abacate != -1)
         {
             char *token = strtok(mensagem_rec.msg, " ");
             printf("Killing program %s - time of execution %ss - process pid %d\n", token, strtok(NULL, " "), mensagem_rec.pid);
